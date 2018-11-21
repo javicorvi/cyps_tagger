@@ -2,30 +2,23 @@ package es.bsc.inb.limtox.model;
 
 public class CypTerm {
 
-	private String uniProtEntry="";
-	
 	private String uniProtEntryName="";
 	
-	private String cypTermStandardized="";
+	private String organism="";
+	
+	private String type="";
 	
 	private String cypTerm="";
 
-	
-	
-	public CypTerm(String uniProtEntry, String uniProtEntryName, String cypTermStandardized, String cypTerm) {
+	private String cypFamily="";
+
+	public CypTerm(String uniProtEntryName, String organism, String type, String cypTerm, String cypFamily) {
 		super();
-		this.uniProtEntry = uniProtEntry;
 		this.uniProtEntryName = uniProtEntryName;
-		this.cypTermStandardized = cypTermStandardized;
+		this.organism = organism;
+		this.type = type;
 		this.cypTerm = cypTerm;
-	}
-
-	public String getUniProtEntry() {
-		return uniProtEntry;
-	}
-
-	public void setUniProtEntry(String uniProtEntry) {
-		this.uniProtEntry = uniProtEntry;
+		this.cypFamily = cypFamily;
 	}
 
 	public String getUniProtEntryName() {
@@ -36,12 +29,20 @@ public class CypTerm {
 		this.uniProtEntryName = uniProtEntryName;
 	}
 
-	public String getCypTermStandardized() {
-		return cypTermStandardized;
+	public String getOrganism() {
+		return organism;
 	}
 
-	public void setCypTermStandardized(String cypTermStandardized) {
-		this.cypTermStandardized = cypTermStandardized;
+	public void setOrganism(String organism) {
+		this.organism = organism;
+	}
+
+	public String getType() {
+		return type;
+	}
+
+	public void setType(String type) {
+		this.type = type;
 	}
 
 	public String getCypTerm() {
@@ -51,6 +52,17 @@ public class CypTerm {
 	public void setCypTerm(String cypTerm) {
 		this.cypTerm = cypTerm;
 	}
+
+	public String getCypFamily() {
+		return cypFamily;
+	}
+
+	public void setCypFamily(String cypFamily) {
+		this.cypFamily = cypFamily;
+	}
+	
+	
+
 	
 	
 	

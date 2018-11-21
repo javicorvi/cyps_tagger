@@ -12,9 +12,11 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 
 import org.apache.log4j.Logger;
 import org.springframework.stereotype.Service;
@@ -52,7 +54,7 @@ public class TaggingServiceImpl implements TaggingService{
 			String cypsDict = propertiesParameters.getProperty("cypsDict");
 			Integer index_id = new Integer(propertiesParameters.getProperty("index_id"));
 			Integer index_text_to_tag = new Integer(propertiesParameters.getProperty("index_text_to_tag"));
-			
+			String taxonomyInformationPath = propertiesParameters.getProperty("taxonomyInformationPath");
 			File inputDirectory = new File(inputDirectoryPath);
 		    if(!inputDirectory.exists()) {
 		    	return ;
@@ -81,15 +83,19 @@ public class TaggingServiceImpl implements TaggingService{
 					taggingLog.info("Processing file  : " + file_to_classify.getName());
 					String fileName = file_to_classify.getName();
 					String outputFilePath = outputDirectory + File.separator + fileName;
+					
+					
+					String taxonomyInputInformation = taxonomyInformationPath + file_to_classify.getName()+"_tagged.txt";
+					
 					BufferedWriter outPutFile = new BufferedWriter(new FileWriter(outputFilePath));
-					outPutFile.write("id\tstartOffset\tendOffset\ttext\tentityType\tcyp_standardized\tuni_prot_entry\tuni_prot_entry_name\n");
+					outPutFile.write("id\tstartOffset\tendOffset\ttext\tentityType\tuni_prot_entry_name\torganism\tcyp_standard\n");
 					outPutFile.flush();
 					for (String line : ObjectBank.getLineIterator(file_to_classify.getAbsolutePath(), "utf-8")) {
 						try {
 							String[] data = line.split("\t");
 							String id =  data[index_id];
 							String text =  data[index_text_to_tag];
-							tagging(pipeline, id, text, outPutFile, file_to_classify.getName());
+							tagging(cypsDict, taxonomyInputInformation, pipeline, id, text, outPutFile, file_to_classify.getName());
 						}  catch (Exception e) {
 							taggingLog.error("Error tagging the document line " + line + " belongs to the file: " +  fileName,e);
 						} 
@@ -108,11 +114,22 @@ public class TaggingServiceImpl implements TaggingService{
 
 	private void generateRulesForTagging(String inputPath,String outputPath) throws IOException {
 		BufferedWriter termWriter = new BufferedWriter(new FileWriter(outputPath));
+		Set<String> terms = new HashSet<String>();
 		for (String line : ObjectBank.getLineIterator(inputPath, "utf-8")) {
-			String[] data = line.split("\t");
-			termWriter.write(this.removeInvalidCharacters(data[3]) + "\t" + "cyp\n");
+			if(!line.startsWith("uniprot_entry_name")) {
+				String[] data = line.split("\t");
+				if(data[2].endsWith("_variant")) {
+					//terms.add(data[4]);
+					terms.add(this.removeInvalidCharacters(data[4]) + "\t" + data[2]+"_cyp\n");
+				}else {
+					//terms.add(data[3]);
+					terms.add(this.removeInvalidCharacters(data[3]) + "\t" + data[2]+"_cyp\n");
+				}
+			}
+		}
+		for (String string : terms) {
+			termWriter.write(string);
 			termWriter.flush();
-			cypTerms.put(data[3], new CypTerm(data[0],data[1],data[2],data[3]));
 		}
 		termWriter.close();
 	}
@@ -143,14 +160,14 @@ public class TaggingServiceImpl implements TaggingService{
 	 * @return
 	 * @throws MoreThanOneEntityException
 	 */
-	private void tagging(StanfordCoreNLP pipeline, String id, String text_to_tag, BufferedWriter output, String fileName) {
+	private void tagging(String dictInput,String taxonomyInputInformation, StanfordCoreNLP pipeline, String id, String text_to_tag, BufferedWriter output, String fileName) {
 //		String text = "Joe Smith CYP2C8 was born in California. " +
 //			      "In 2017, he went amineptine to Paris, France in the summer Cytochrome P450 4A12. " +
 //			      "xenobiotic liver toxicity His flight left at 3:00pm on alatrofloxacin mesylate July 10th, 2017. " +
 //			      "After eating some escargot for the first time, Joe said, \"That was delicious!\" " +
 //			      "He sent xenobiotic liver toxicity a postcard to his sister Jane Smith, Cytochrome P450. " +
 //			      "After Cytochrome P450 2D4 hearing about Joe's fipexide trip, Cyp3a-2 Jane decided she might go to France one day.";
-		//Annotation document = new Annotation(text);
+//		//Annotation document = new Annotation(text);
 		Annotation document = new Annotation(text_to_tag);
 		// run all Annotators on this text
 		pipeline.annotate(document);
@@ -163,19 +180,21 @@ public class TaggingServiceImpl implements TaggingService{
     			try {
     				String keyword = entityMention.get(TextAnnotation.class);
         			String entityType = entityMention.get(CoreAnnotations.EntityTypeAnnotation.class);
-			        if(entityType!=null && entityType.equals("cyp")) {
+			        if(entityType!=null && entityType.endsWith("_cyp")) {
 			        	CoreLabel token = entityMention.get(TokensAnnotation.class).get(0);
-			        	CypTerm cypTerm = cypTerms.get(keyword);
+			        	CypTerm cypTerm = this.findCypTermInformation(dictInput, taxonomyInputInformation, keyword, id);
 			        	if(cypTerm!=null) {
 			        		output.write(id + "\t"+ token.beginPosition() + "\t" + (token.beginPosition() + keyword.length())  + "\t" + keyword + "\t" + entityType + "\t" + 
-			        				cypTerm.getCypTermStandardized() + "\t" + cypTerm.getUniProtEntry() + "\t" + cypTerm.getUniProtEntryName() + "\n");
+			        				cypTerm.getUniProtEntryName() + "\t" + cypTerm.getOrganism() + "\t" + cypTerm.getCypFamily() + "\n");
 			        	} else {
 			        		//when the combiner is used a statically ner, that way is not present in the dictionary
 			        		output.write(id + "\t"+ token.beginPosition() + "\t" + (token.beginPosition() + keyword.length())  + "\t" + keyword + "\t" + entityType + "\t null \t null \t null \n");
 			        		taggingLog.warn("Entry not found " + keyword);
 			        	}
 			        	output.flush();
-				    }
+			        }else {
+			        	entityType.toString();
+			        }
         		} catch (Exception e) {
 					taggingLog.error("Generic Error tagging id "  + id + " in file " + fileName, e);
 				}
@@ -183,6 +202,65 @@ public class TaggingServiceImpl implements TaggingService{
         }
 	}
 
+	/**
+	 * 
+	 * @param keyword
+	 * @return
+	 */
+	private CypTerm findCypTermInformation(String inputPath, String taxonomyInputInformation, String keyword, String id) {
+		List<CypTerm> cyps = new ArrayList<CypTerm>();
+		for (String line : ObjectBank.getLineIterator(inputPath, "utf-8")) {
+			if(!line.startsWith("uniprot_entry_name")) {
+				String[] data = line.split("\t");
+				if(data[2].endsWith("_variant")) {
+					if(data[4].equals(keyword)) {
+						cyps.add(new CypTerm(data[0],data[1],data[2],data[4],data[3]));
+					}
+				}else {
+					if(data[3].equals(keyword)) {
+						cyps.add(new CypTerm(data[0],data[1],data[2],data[3],""));
+					}
+				}
+			}
+		}
+		if(cyps.size()>1) {
+			for (String line : ObjectBank.getLineIterator(taxonomyInputInformation, "utf-8")) {
+				String[] data = line.split("\t");
+				if(data[1].equals(id)) {
+					String[] organisms = data[0].split("\\|");
+					for (String organism : organisms) {
+						int i = organism.lastIndexOf(':');
+						int i_ = organism.lastIndexOf('?');
+						if(i_!=-1) {
+							organism = organism.substring(i+1,i_-1);
+						}else {
+							organism = organism.substring(i+1);
+						}
+						for (CypTerm cypTerm : cyps) {
+							String org_cys = cypTerm.getOrganism();
+							int i2 = org_cys.lastIndexOf(':');
+							org_cys = org_cys.substring(i2+1);
+							if (organism.equals(org_cys)) {
+								return cypTerm;
+							}
+						}
+					}
+				}
+			}
+			for (CypTerm cypTerm : cyps) {
+				if(cypTerm.getUniProtEntryName().contains("_HUMAN")) {
+					return cypTerm;
+				}
+			}
+		}else if(cyps.size()==1){
+			return cyps.get(0);
+		
+		
+		}else if (cyps.size()==0) {//this means that the key founded was not generates in the variants and is from the nlp core tagger algorithm
+			return null;
+		}
+		return null;
+	}
 
 	private List<String> readFilesProcessed(String outputDirectoryPath) {
 		try {
